@@ -55,12 +55,48 @@ Script de post-instalación desatendida para **Debian Sid (Unstable) + MATE**.
 
 ## Uso
 
+### Descarga directa
+
 ```bash
 # Debian 13 estable
-sudo bash debian13-mate-postinstall.sh
+curl -O https://kodipc.serv00.net/apks/debian13-mate-postinstall.sh
+chmod +x debian13-mate-postinstall.sh
+sudo ./debian13-mate-postinstall.sh
+```
 
+```bash
 # Debian Sid
-sudo bash debian-sid-mate-postinstall.sh
+curl -O https://kodipc.serv00.net/apks/debian-sid-mate-postinstall.sh
+chmod +x debian-sid-mate-postinstall.sh
+sudo ./debian-sid-mate-postinstall.sh
+```
+
+O usando `wget`:
+
+```bash
+# Debian 13 estable
+wget https://kodipc.serv00.net/apks/debian13-mate-postinstall.sh
+chmod +x debian13-mate-postinstall.sh
+sudo ./debian13-mate-postinstall.sh
+```
+
+```bash
+# Debian Sid
+wget https://kodipc.serv00.net/apks/debian-sid-mate-postinstall.sh
+chmod +x debian-sid-mate-postinstall.sh
+sudo ./debian-sid-mate-postinstall.sh
+```
+
+### Ejecución directa (sin descargar)
+
+```bash
+# Debian 13 estable
+curl -sL https://kodipc.serv00.net/apks/debian13-mate-postinstall.sh | sudo bash
+```
+
+```bash
+# Debian Sid
+curl -sL https://kodipc.serv00.net/apks/debian-sid-mate-postinstall.sh | sudo bash
 ```
 
 ## Requisitos
