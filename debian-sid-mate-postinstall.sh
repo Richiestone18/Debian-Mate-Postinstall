@@ -1,0 +1,469 @@
+#!/bin/bash
+###############################################################################
+# Script de post-instalación desatendida para Debian Sid (Unstable) + MATE
+# Basado en los manuales de Richiestone
+# Ejecutar como root: sudo bash debian-sid-mate-postinstall.sh
+#
+# PRERREQUISITOS antes de correr este script:
+#   1. Agregar non-free y non-free-firmware a los repos de Sid en
+#      /etc/apt/sources.list (ver nota abajo)
+#   2. Tener MATE instalado (tasksel o apt install mate-desktop-environment)
+#
+# Ejemplo de /ec/apt/sources.list para Sid:
+#   deb http://deb.debian.org/debian/ sid main contrib non-free non-free-firmware
+#   deb-src http://deb.debian.org/debian/ sid main contrib non-free non-free-firmware
+###############################################################################
+
+set -euo pipefail
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+CYAN='\033[0;36m'
+NC='\033[0m'
+
+log()    { echo -e "${GREEN}[OK]${NC} $*"; }
+warn()   { echo -e "${YELLOW}[WARN]${NC} $*"; }
+error()  { echo -e "${RED}[ERROR]${NC} $*"; }
+header() { echo -e "\n${CYAN}========================================${NC}"; echo -e "${CYAN}  $*${NC}"; echo -e "${CYAN}========================================${NC}\n"; }
+
+###############################################################################
+# 0. VERIFICACIONES PREVIAS
+###############################################################################
+header "Verificando requisitos previos"
+
+if [[ $EUID -ne 0 ]]; then
+    error "Este script debe ejecutarse como root (sudo)."
+    exit 1
+fi
+
+REAL_USER=${SUDO_USER:-$(logname 2>/dev/null || echo "")}
+if [[ -z "$REAL_USER" ]]; then
+    error "No se pudo detectar el usuario real. Ejecuta con sudo."
+    exit 1
+fi
+log "Ejecutando para el usuario: $REAL_USER"
+
+if [[ -f /etc/os-release ]]; then
+    source /etc/os-release
+    log "Detectado: $PRETTY_NAME"
+
+    # Verificar que sea Sid
+    if [[ "${VERSION_CODENAME:-}" != "sid" && "${ID:-}" != "debian" ]]; then
+        warn "Este script está diseñado para Debian Sid."
+        warn "Sistema detectado: ${PRETTY_NAME:-desconocido}"
+        warn "Continúa bajo tu propio riesgo."
+    fi
+fi
+
+if ! ping -c 1 -W 3 deb.debian.org &>/dev/null; then
+    error "Sin conexión a internet. Verifica tu red antes de continuar."
+    exit 1
+fi
+log "Conexión a internet OK"
+
+# Verificar que los repos tengan non-free y non-free-firmware
+if grep -qE '^deb.*sid.*main' /etc/apt/sources.list 2>/dev/null; then
+    if ! grep -qE '^deb.*sid.*non-free' /etc/apt/sources.list 2>/dev/null; then
+        warn "Los repos de Sid no tienen non-free/non-free-firmware habilitados."
+        warn "Muchos paquetes de firmware fallarán al instalarse."
+        warn "Agrégalos a /etc/apt/sources.list antes de continuar:"
+        warn "  deb http://deb.debian.org/debian/ sid main contrib non-free non-free-firmware"
+        echo ""
+        read -p "¿Continuar de todos modos? (s/N): " resp
+        if [[ "${resp,,}" != "s" ]]; then
+            error "Abortando. Agrega los repos y vuelve a ejecutar."
+            exit 1
+        fi
+    fi
+fi
+
+###############################################################################
+# 1. REPOSITORIO DEB-MULTIMEDIA (Sid/Unstable)
+###############################################################################
+header "Agregando repositorio deb-multimedia"
+
+DMO_KEYRING="deb-multimedia-keyring_2024.9.1_all.deb"
+wget -q "https://www.deb-multimedia.org/pool/main/d/deb-multimedia-keyring/${DMO_KEYRING}" -O "/tmp/${DMO_KEYRING}"
+dpkg -i "/tmp/${DMO_KEYRING}"
+rm -f "/tmp/${DMO_KEYRING}"
+
+cat > /etc/apt/sources.list.d/dmo.sources << 'EOF'
+Types: deb
+URIs: https://www.deb-multimedia.org
+Suites: unstable
+Components: main non-free
+Signed-By: /usr/share/keyrings/deb-multimedia-keyring.pgp
+Enabled: yes
+EOF
+
+log "Repositorio deb-multimedia agregado para Sid"
+
+###############################################################################
+# 2. ACTUALIZAR REPOSITORIOS
+###############################################################################
+header "Actualizando lista de paquetes"
+apt update
+apt dist-upgrade -y
+log "Sistema actualizado"
+
+###############################################################################
+# 3. FIRMWARE PRINCIPAL (por si no inicia el escritorio)
+###############################################################################
+header "Instalando firmware principal"
+
+apt install -y firmware-linux-nonfree firmware-amd-graphics firmware-realtek
+log "Firmware principal instalado"
+
+###############################################################################
+# 4. FIRMWARE COMPLETO PARA DISPOSITIVOS DE RED Y PERIFÉRICOS
+###############################################################################
+header "Instalando firmware completo de red y periféricos"
+
+apt install -y \
+    firmware-ath9k-htc firmware-atheros \
+    firmware-b43-installer firmware-b43legacy-installer \
+    firmware-bnx2 firmware-bnx2x firmware-brcm80211 \
+    firmware-intel-sound firmware-ipw2x00 firmware-iwlwifi \
+    firmware-libertas firmware-misc-nonfree firmware-myricom firmware-netronome \
+    firmware-netxen firmware-qcom-media firmware-qcom-soc firmware-qlogic \
+    firmware-samsung firmware-siano \
+    firmware-sof-signed firmware-ti-connectivity firmware-zd1211 \
+    firmware-ast firmware-cavium firmware-ivtv \
+    firmware-linux firmware-linux-free
+log "Firmware completo instalado"
+
+###############################################################################
+# 5. UTILIDADES Y TWEAKS DEL SISTEMA
+###############################################################################
+header "Instalando utilidades y tweaks del sistema"
+
+apt install -y \
+    papirus-icon-theme arc-theme mate-tweak mate-menu \
+    samba htop btop ttf-mscorefonts-installer gdebi ssh net-tools \
+    curl wget git \
+    caja-actions caja-admin caja-eiciel caja-gtkhash caja-image-converter \
+    caja-mediainfo caja-open-terminal caja-rename caja-seahorse caja-sendto \
+    caja-share caja-wallpaper caja-xattr-tags
+log "Utilidades y tweaks instalados"
+
+###############################################################################
+# 6. PIPEWIRE Y DEPENDENCIAS MULTIMEDIA
+###############################################################################
+header "Instalando PipeWire y plugins multimedia"
+
+apt install -y \
+    pipewire \
+    pipewire-alsa \
+    pipewire-audio \
+    pipewire-bin \
+    pipewire-doc \
+    pipewire-pulse \
+    pipewire-jack \
+    pipewire-libcamera \
+    pipewire-module-xrdp \
+    pipewire-v4l2 \
+    wireplumber \
+    wireplumber-doc \
+    libpipewire-0.3-0t64 libpipewire-0.3-common \
+    libpipewire-0.3-modules libpipewire-0.3-modules-x11 libpipewire-0.3-modules-xrdp \
+    libspa-0.2-bluetooth \
+    libspa-0.2-jack \
+    libspa-0.2-libcamera \
+    libspa-0.2-modules \
+    libwireplumber-0.5-0 \
+    qpwgraph \
+    vlc-plugin-pipewire \
+    pipewire-tests
+log "PipeWire instalado"
+
+###############################################################################
+# 7. HABILITAR PIPEWIRE (desactivar PulseAudio)
+###############################################################################
+header "Habilitando PipeWire para $REAL_USER"
+
+USER_UID=$(id -u "$REAL_USER")
+XDG_RUNTIME_DIR="/run/user/${USER_UID}"
+DBUS_SESSION_BUS_ADDRESS="unix:path=${XDG_RUNTIME_DIR}/bus"
+
+su - "$REAL_USER" -c "
+    export XDG_RUNTIME_DIR='${XDG_RUNTIME_DIR}'
+    export DBUS_SESSION_BUS_ADDRESS='${DBUS_SESSION_BUS_ADDRESS}'
+    systemctl --user --now disable pulseaudio.{socket,service} || true
+    systemctl --user mask pulseaudio || true
+    systemctl --user --now enable pipewire{,-pulse}.{socket,service} || true
+    systemctl --user --now enable wireplumber.service || true
+"
+
+log "PipeWire habilitado para $REAL_USER"
+
+###############################################################################
+# 8. ACTUALIZACIÓN DESPUÉS DE PIPEWIRE
+###############################################################################
+header "Actualización post-PipeWire"
+apt update
+apt dist-upgrade -y
+log "Sistema actualizado"
+
+###############################################################################
+# 9. KERNEL LIQUIX
+###############################################################################
+header "Instalando kernel Liquorix"
+
+apt dist-upgrade -y
+
+if ! dpkg -l | grep -q liquorix; then
+    curl -s 'https://liquorix.net/install-liquorix.sh' | bash
+    log "Kernel Liquorix instalado"
+else
+    log "Kernel Liquorix ya instalado"
+fi
+
+###############################################################################
+# 10. DRIVERS AMD (64-bit + 32-bit)
+###############################################################################
+header "Instalando drivers AMD"
+
+dpkg --add-architecture i386
+apt update
+apt install -y libglx-mesa0:i386 mesa-vulkan-drivers:i386 libgl1-mesa-dri:i386 radeontop
+log "Drivers AMD instalados"
+
+###############################################################################
+# 11. WINE (desde WineHQ para Sid/Unstable)
+###############################################################################
+header "Instalando Wine"
+
+mkdir -pm755 /etc/apt/keyrings
+wget -qO - https://dl.winehq.org/wine-builds/winehq.key | \
+    gpg --dearmor -o /etc/apt/keyrings/winehq-archive.key
+
+cat > /etc/apt/sources.list.d/winehq.sources << 'EOF'
+Types: deb
+URIs: https://dl.winehq.org/wine-builds/debian
+Suites: sid
+Components: main
+Architectures: amd64 i386
+Signed-By: /etc/apt/keyrings/winehq-archive.key
+EOF
+
+apt update
+apt install --install-recommends -y winehq-stable
+log "Wine instalado"
+
+###############################################################################
+# 12. BRAVE BROWSER
+###############################################################################
+header "Instalando Brave Browser"
+
+curl -fsS https://dl.brave.com/install.sh | sh
+log "Brave Browser instalado"
+
+###############################################################################
+# 13. KODI Y DEPENDENCIAS
+###############################################################################
+header "Instalando Kodi y dependencias"
+
+apt install -y \
+    kodi kodi-audiodecoder-modplug kodi-audiodecoder-openmpt \
+    kodi-audiodecoder-sidplay kodi-audioencoder-flac kodi-audioencoder-lame \
+    kodi-audioencoder-vorbis kodi-audioencoder-wav kodi-imagedecoder-heif \
+    kodi-inputstream-adaptive kodi-inputstream-ffmpegdirect kodi-inputstream-rtmp \
+    kodi-peripheral-joystick kodi-pvr-iptvsimple kodi-vfs-libarchive \
+    kodi-vfs-rar kodi-vfs-sftp retroarch openrct2
+log "Kodi instalado"
+
+###############################################################################
+# 14. PROGRAMAS DE DISEÑO GRÁFICO Y MULTIMEDIA
+###############################################################################
+header "Instalando programas de diseño gráfico y multimedia"
+
+apt install -y \
+    inkscape inkscape-open-symbols inkscape-speleo inkscape-survex-export \
+    inkscape-textext inkscape-textext-doc krita krita-l10n \
+    gimp gimp-data-extras scribus scribus-doc scribus-template \
+    darktable openshot-qt audacity dvdstyler simplescreenrecorder \
+    guvcview amule filezilla qbittorrent blender
+log "Programas de diseño y multimedia instalados"
+
+###############################################################################
+# 15. HERRAMIENTAS DE SEGURIDAD / AUDITORÍA
+###############################################################################
+header "Instalando herramientas de auditoría de redes"
+
+apt install -y wifite bully hashcat hcxdumptool hcxtools wireshark macchanger
+log "Herramientas de seguridad instaladas"
+
+###############################################################################
+# 16. AUTOLOGIN EN LIGHTDM
+###############################################################################
+header "Configurando autologin en LightDM"
+
+mkdir -p /etc/lightdm/lightdm.conf.d
+cat > /etc/lightdm/lightdm.conf.d/01-autologin.conf << EOF
+[Seat:*]
+autologin-user=${REAL_USER}
+autologin-user-timeout=0
+EOF
+
+log "Autologin configurado para $REAL_USER"
+
+###############################################################################
+# 17. ACTUALIZACIÓN FINAL
+###############################################################################
+header "Actualización final del sistema"
+
+apt update
+apt full-upgrade -y
+log "Sistema actualizado"
+
+###############################################################################
+# 18. LIMPIEZA FINAL
+###############################################################################
+header "Limpieza final"
+
+apt autoremove -y
+apt autoclean
+log "Limpieza completada"
+
+###############################################################################
+# 19. APLICAR TEMA, ICONOS, PANEL Y CONFIGURACIÓN DEL ESCRITORIO
+###############################################################################
+header "Aplicando tema, iconos, panel y configuración del escritorio"
+
+su - "$REAL_USER" -c '
+    FLAG="$HOME/.config/mate-panel-configured"
+
+    mkdir -p "$HOME/.config/autostart"
+    cat > "$HOME/.config/autostart/mate-panel-setup.desktop" << "DESKTOP"
+[Desktop Entry]
+Type=Application
+Name=MATE Panel Setup
+Exec=$HOME/.local/bin/mate-panel-setup.sh
+Hidden=false
+NoDisplay=true
+X-MATE-Autostart-enabled=true
+DESKTOP
+
+    mkdir -p "$HOME/.local/bin"
+    cat > "$HOME/.local/bin/mate-panel-setup.sh" << "SCRIPT"
+#!/bin/bash
+FLAG="$HOME/.config/mate-panel-configured"
+if [ -f "$FLAG" ]; then
+    exit 0
+fi
+
+sleep 3
+
+dbus-launch dconf load /org/mate/ << MATECONF
+[desktop/interface]
+gtk-theme="Arc-Dark"
+icon-theme="Papirus-Dark"
+
+[marco/general]
+theme="Arc-Dark"
+num-workspaces=1
+
+[desktop/background]
+picture-filename="/usr/share/backgrounds/cosmos/background-1.xml"
+picture-options="zoom"
+color-shading-type="vertical-gradient"
+primary-color="rgb(88,145,188)"
+secondary-color="rgb(60,143,37)"
+
+[desktop/sound]
+event-sounds=true
+theme-name="freedesktop"
+
+[desktop/peripherals/mouse]
+cursor-theme="mate-black"
+
+[panel/toplevels/top]
+expand=true
+orientation="top"
+screen=0
+size=32
+
+[panel/objects/clock]
+applet-iid="ClockAppletFactory::ClockApplet"
+locked=true
+object-type="applet"
+position=0
+relative-to-edge="end"
+toplevel-id="top"
+
+[panel/objects/notification-area]
+applet-iid="NotificationAreaAppletFactory::NotificationArea"
+locked=true
+object-type="applet"
+position=10
+relative-to-edge="end"
+toplevel-id="top"
+
+[panel/objects/object-0]
+object-type="menu"
+position=5
+tooltip="Menú compacto"
+toplevel-id="top"
+use-menu-path=false
+
+[panel/objects/object-1]
+applet-iid="WnckletFactory::WindowListApplet"
+object-type="applet"
+position=121
+toplevel-id="top"
+
+[panel/objects/object-2]
+launcher-location="/usr/share/applications/brave-browser.desktop"
+object-type="launcher"
+position=27
+toplevel-id="top"
+
+[panel/objects/object-3]
+launcher-location="/usr/share/applications/mate-terminal.desktop"
+object-type="launcher"
+position=61
+toplevel-id="top"
+
+[panel/objects/object-4]
+launcher-location="/usr/share/applications/caja-browser.desktop"
+object-type="launcher"
+position=88
+toplevel-id="top"
+
+[panel/objects/object-5]
+applet-iid="MultiLoadAppletFactory::MultiLoadApplet"
+object-type="applet"
+position=1479
+toplevel-id="top"
+
+[panel/objects/object-6]
+applet-iid="NetspeedAppletFactory::NetspeedApplet"
+object-type="applet"
+position=1434
+toplevel-id="top"
+MATECONF
+
+rm -f "$HOME/.config/autostart/mate-panel-setup.desktop"
+rm -f "$HOME/.local/bin/mate-panel-setup.sh"
+touch "$FLAG"
+mate-panel --replace &
+SCRIPT
+
+    chmod +x "$HOME/.local/bin/mate-panel-setup.sh"
+'
+
+log "Tema Arc-Dark, iconos Papirus-Dark y panel configurado"
+
+###############################################################################
+# FIN
+###############################################################################
+header "INSTALACIÓN COMPLETADA"
+
+echo ""
+log "Todo instalado correctamente."
+echo ""
+warn "Se recomienda REINICIAR para aplicar el kernel Liquorix y todos los cambios."
+echo ""
+echo "  sudo reboot"
+echo ""
