@@ -230,28 +230,6 @@ apt install -y libglx-mesa0:i386 mesa-vulkan-drivers:i386 libgl1-mesa-dri:i386 r
 log "Drivers AMD instalados"
 
 ###############################################################################
-# 11. WINE (desde WineHQ para Sid/Unstable)
-###############################################################################
-header "Instalando Wine"
-
-mkdir -pm755 /etc/apt/keyrings
-wget -qO - https://dl.winehq.org/wine-builds/winehq.key | \
-    gpg --dearmor -o /etc/apt/keyrings/winehq-archive.key
-
-cat > /etc/apt/sources.list.d/winehq.sources << 'EOF'
-Types: deb
-URIs: https://dl.winehq.org/wine-builds/debian
-Suites: sid
-Components: main
-Architectures: amd64 i386
-Signed-By: /etc/apt/keyrings/winehq-archive.key
-EOF
-
-apt update
-apt install --install-recommends -y winehq-stable
-log "Wine instalado"
-
-###############################################################################
 # 12. BRAVE BROWSER
 ###############################################################################
 header "Instalando Brave Browser"
