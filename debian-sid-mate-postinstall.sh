@@ -261,7 +261,7 @@ apt install -y \
     inkscape-textext inkscape-textext-doc krita krita-l10n \
     gimp gimp-data-extras scribus scribus-doc scribus-template \
     darktable openshot-qt audacity dvdstyler simplescreenrecorder \
-    guvcview amule filezilla qbittorrent blender
+    guvcview amule filezilla qbittorrent
 log "Programas de diseño y multimedia instalados"
 
 ###############################################################################
