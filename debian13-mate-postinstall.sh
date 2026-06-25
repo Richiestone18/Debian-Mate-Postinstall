@@ -120,12 +120,12 @@ apt install -y \
     firmware-ath9k-htc firmware-atheros \
     firmware-b43-installer firmware-b43legacy-installer \
     firmware-bnx2 firmware-bnx2x firmware-brcm80211 \
-    firmware-intel-sound firmware-ipw2x00 firmware-iwlwifi \
+    firmware-intel-sound firmware-iwlwifi \
     firmware-libertas firmware-misc-nonfree firmware-myricom firmware-netronome \
     firmware-netxen firmware-qlogic \
     firmware-samsung firmware-siano firmware-sof-signed \
     firmware-ti-connectivity firmware-zd1211 \
-    firmware-ast firmware-cavium firmware-ivtv
+    firmware-ast firmware-cavium 
 log "Firmware completo instalado"
 
 ###############################################################################
